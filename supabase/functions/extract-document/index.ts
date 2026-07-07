@@ -400,6 +400,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const MAX_TEXT_LENGTH = 50000;
+    if (text.length > MAX_TEXT_LENGTH) {
+      console.log(`Document ${document_id}: Text is ${text.length} chars, truncating to ${MAX_TEXT_LENGTH}`);
+      text = text.substring(0, MAX_TEXT_LENGTH);
+    }
+
     console.log(`Document ${document_id}: Extracted ${text.length} characters from ${fileExtension.toUpperCase()}, calling Gemini API...`);
 
     // Build Gemini API request

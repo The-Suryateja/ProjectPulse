@@ -207,6 +207,11 @@ export default function ProjectView() {
           }
           return [...prev, newDoc];
         });
+
+        // Trigger extraction asynchronously — don't block the UI
+        triggerExtraction(newDoc.id).catch((err) => {
+          console.error('Extraction trigger error:', err);
+        });
       }
     }
 
@@ -508,46 +513,41 @@ export default function ProjectView() {
           )}
         </div>
 
-        {documents.length > 0 && (
+        {documents.length > 0 && !hasSuccessfulReport && (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-medium text-gray-900">Generate Report</h2>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  {hasSuccessfulReport
-                    ? 'Report generated successfully.'
+                  {report?.generation_status === 'failed'
+                    ? 'Report generation failed. Try again.'
                     : allProcessed
                     ? 'All documents processed. Ready to generate your report.'
                     : 'Process all documents first to generate the report.'}
                 </p>
               </div>
-              {hasSuccessfulReport ? (
-                <Link
-                  to={`/report/${projectId}`}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  View Report
-                </Link>
-              ) : (
-                <button
-                  onClick={generateReport}
-                  disabled={!allProcessed || generating}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {generating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <BarChart3 className="w-4 h-4" />
-                      Generate Report
-                    </>
-                  )}
-                </button>
-              )}
+              <button
+                onClick={generateReport}
+                disabled={!allProcessed || generating}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : report?.generation_status === 'failed' ? (
+                  <>
+                    <BarChart3 className="w-4 h-4" />
+                    Retry
+                  </>
+                ) : (
+                  <>
+                    <BarChart3 className="w-4 h-4" />
+                    Generate Report
+                  </>
+                )}
+              </button>
             </div>
             {report?.generation_status === 'failed' && report.error_message && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
