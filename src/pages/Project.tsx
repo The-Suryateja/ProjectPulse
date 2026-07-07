@@ -514,7 +514,9 @@ export default function ProjectView() {
               <div>
                 <h2 className="text-lg font-medium text-gray-900">Generate Report</h2>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  {allProcessed
+                  {hasSuccessfulReport
+                    ? 'Report generated successfully.'
+                    : allProcessed
                     ? 'All documents processed. Ready to generate your report.'
                     : 'Process all documents first to generate the report.'}
                 </p>
