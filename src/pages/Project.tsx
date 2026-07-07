@@ -296,21 +296,27 @@ export default function ProjectView() {
   async function generateReport() {
     setGenerating(true);
 
-    // Create/update report record to processing status
-    await supabase
-      .from('reports')
-      .upsert({
-        project_id: projectId,
-        generation_status: 'processing',
-        error_message: null
-      }, { onConflict: 'project_id' });
+    try {
+      // Create/update report record to processing status
+      await supabase
+        .from('reports')
+        .upsert({
+          project_id: projectId,
+          generation_status: 'processing',
+          error_message: null
+        }, { onConflict: 'project_id' });
 
-    const result = await triggerAggregation(projectId!);
-    if (result.error) {
-      console.error('Aggregation error:', result.error);
+      const result = await triggerAggregation(projectId!);
+      if (result.error) {
+        console.error('Aggregation error:', result.error);
+      }
+    } catch (err) {
+      console.error('Aggregation error:', err);
+    } finally {
+      // Always re-fetch so UI reflects the latest report state immediately
+      await fetchData();
       setGenerating(false);
     }
-    await fetchData();
   }
 
   const allProcessed = documents.length > 0 && documents.every((d) => d.extraction_status === 'done');
@@ -356,7 +362,7 @@ export default function ProjectView() {
             {hasSuccessfulReport && report.aggregated_data && (
               <Link
                 to={`/report/${projectId}`}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
               >
                 <BarChart3 className="w-4 h-4" />
                 View Report
@@ -512,36 +518,46 @@ export default function ProjectView() {
                     ? 'All documents processed. Ready to generate your report.'
                     : 'Process all documents first to generate the report.'}
                 </p>
-                {report?.generation_status === 'failed' && report.error_message && (
-                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-red-800">Report Generation Failed</p>
-                        <p className="text-sm text-red-700 mt-1 font-mono whitespace-pre-wrap">{report.error_message}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
-              <button
-                onClick={generateReport}
-                disabled={!allProcessed || generating}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {generating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <BarChart3 className="w-4 h-4" />
-                    Generate Report
-                  </>
-                )}
-              </button>
+              {hasSuccessfulReport ? (
+                <Link
+                  to={`/report/${projectId}`}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  View Report
+                </Link>
+              ) : (
+                <button
+                  onClick={generateReport}
+                  disabled={!allProcessed || generating}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <BarChart3 className="w-4 h-4" />
+                      Generate Report
+                    </>
+                  )}
+                </button>
+              )}
             </div>
+            {report?.generation_status === 'failed' && report.error_message && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-800">Report Generation Failed</p>
+                    <p className="text-sm text-red-700 mt-1 font-mono whitespace-pre-wrap">{report.error_message}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>

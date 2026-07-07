@@ -4,8 +4,14 @@ import { Plus, FolderOpen, FileText, ChevronRight, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { Project } from '../types';
 
+interface ProjectMeta {
+  docCount: number;
+  hasReport: boolean;
+}
+
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectMeta, setProjectMeta] = useState<Record<string, ProjectMeta>>({});
   const [loading, setLoading] = useState(true);
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -24,8 +30,48 @@ export default function Dashboard() {
 
     if (!error && data) {
       setProjects(data);
+      await fetchProjectMeta(data);
     }
     setLoading(false);
+  }
+
+  async function fetchProjectMeta(projectList: Project[]) {
+    if (projectList.length === 0) {
+      setProjectMeta({});
+      return;
+    }
+
+    const projectIds = projectList.map((p) => p.id);
+
+    const [{ data: docCounts }, { data: reports }] = await Promise.all([
+      supabase
+        .from('documents')
+        .select('project_id', { count: 'exact', head: false })
+        .in('project_id', projectIds),
+      supabase
+        .from('reports')
+        .select('project_id, generation_status')
+        .in('project_id', projectIds)
+        .eq('generation_status', 'done')
+    ]);
+
+    const meta: Record<string, ProjectMeta> = {};
+
+    const docCountMap: Record<string, number> = {};
+    (docCounts || []).forEach((row: { project_id: string }) => {
+      docCountMap[row.project_id] = (docCountMap[row.project_id] || 0) + 1;
+    });
+
+    const reportSet = new Set((reports || []).map((r: { project_id: string }) => r.project_id));
+
+    projectList.forEach((p) => {
+      meta[p.id] = {
+        docCount: docCountMap[p.id] || 0,
+        hasReport: reportSet.has(p.id)
+      };
+    });
+
+    setProjectMeta(meta);
   }
 
   async function createProject() {
@@ -40,6 +86,7 @@ export default function Dashboard() {
 
     if (!error && data) {
       setProjects([data, ...projects]);
+      setProjectMeta((prev) => ({ ...prev, [data.id]: { docCount: 0, hasReport: false } }));
       setShowNewProject(false);
       setNewProjectName('');
     }
@@ -55,9 +102,18 @@ export default function Dashboard() {
       .eq('id', projectId);
 
     if (!error) {
-      setProjects(projects.filter(p => p.id !== projectId));
+      setProjects(projects.filter((p) => p.id !== projectId));
+      setProjectMeta((prev) => {
+        const next = { ...prev };
+        delete next[projectId];
+        return next;
+      });
     }
   }
+
+  const lastActivity = projects.length > 0
+    ? new Date(projects[0].created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+    : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -86,61 +142,96 @@ export default function Dashboard() {
             <p className="text-gray-500 mt-4">Loading projects...</p>
           </div>
         ) : projects.length === 0 ? (
-          <div className="text-center py-16">
-            <FolderOpen className="w-12 h-12 text-gray-300 mx-auto" />
-            <h3 className="mt-4 text-lg font-medium text-gray-900">No projects yet</h3>
-            <p className="mt-2 text-gray-500">Get started by creating your first project.</p>
+          <div className="flex flex-col items-center justify-center py-24">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
+              <FolderOpen className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="mt-6 text-xl font-semibold text-gray-900">No projects yet</h3>
+            <p className="mt-2 text-gray-500">Create your first project to get started</p>
             <button
               onClick={() => setShowNewProject(true)}
-              className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="w-4 h-4" />
               Create Project
             </button>
           </div>
         ) : (
-          <div className="grid gap-4">
-            {projects.map((project) => (
-              <div
-                key={project.id}
-                className="bg-white rounded-lg border border-gray-200 p-5 hover:border-gray-300 transition-colors group"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-blue-600" />
+          <>
+            <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
+              <span className="font-medium text-gray-700">{projects.length} {projects.length === 1 ? 'project' : 'projects'}</span>
+              {lastActivity && (
+                <>
+                  <span className="text-gray-300">·</span>
+                  <span>Last activity {lastActivity}</span>
+                </>
+              )}
+            </div>
+
+            <div className="grid gap-4">
+              {projects.map((project) => {
+                const meta = projectMeta[project.id];
+                return (
+                  <Link
+                    key={project.id}
+                    to={`/project/${project.id}`}
+                    className="block bg-white rounded-lg border border-gray-200 p-5 hover:shadow-md hover:border-gray-300 transition-all group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4 flex-1">
+                        <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-base font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
+                            {project.name}
+                          </span>
+                          <div className="flex items-center gap-3 mt-1">
+                            <p className="text-sm text-gray-500">
+                              Created {new Date(project.created_at).toLocaleDateString()}
+                            </p>
+                            {meta && (
+                              <>
+                                <span className="text-gray-300">·</span>
+                                <span className="text-sm text-gray-500">
+                                  {meta.docCount} {meta.docCount === 1 ? 'document' : 'documents'}
+                                </span>
+                                <span className="text-gray-300">·</span>
+                                {meta.hasReport ? (
+                                  <span className="inline-flex items-center gap-1.5 text-sm text-green-600">
+                                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                                    Report ready
+                                  </span>
+                                ) : (
+                                  <span className="text-sm text-gray-400">No report yet</span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-gray-700 group-hover:text-blue-600 transition-colors">
+                          View
+                          <ChevronRight className="w-4 h-4" />
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            deleteProject(project.id);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <Link
-                        to={`/project/${project.id}`}
-                        className="text-base font-medium text-gray-900 hover:text-blue-600 transition-colors"
-                      >
-                        {project.name}
-                      </Link>
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        Created {new Date(project.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      to={`/project/${project.id}`}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-                    >
-                      View
-                      <ChevronRight className="w-4 h-4" />
-                    </Link>
-                    <button
-                      onClick={() => deleteProject(project.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </>
         )}
       </main>
 

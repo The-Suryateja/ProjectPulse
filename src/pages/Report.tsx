@@ -26,7 +26,8 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer
+  ResponsiveContainer,
+  LabelList
 } from 'recharts';
 import { supabase } from '../lib/supabase';
 import type { Report, Document } from '../types';
@@ -124,6 +125,13 @@ export default function ReportView() {
       ]
     : [];
 
+  const isSingleActionCategory =
+    actionItemsChartData.length > 0 &&
+    actionItemsChartData.filter((d) => d.value > 0).length === 1;
+  const singleActionCategory = isSingleActionCategory
+    ? actionItemsChartData.find((d) => d.value > 0)
+    : null;
+
   const risksByTrendData = data
     ? Object.entries(
         data.merged_risks.reduce(
@@ -139,6 +147,10 @@ export default function ReportView() {
         color: TREND_COLORS[trend as keyof typeof TREND_COLORS]
       }))
     : [];
+
+  const isSingleTrendCategory =
+    risksByTrendData.length === 1;
+  const singleTrendName = isSingleTrendCategory ? risksByTrendData[0]?.name : null;
 
   const risksByDocData =
     data && documents.length > 0
@@ -229,6 +241,21 @@ export default function ReportView() {
                   outerRadius={90}
                   paddingAngle={5}
                   dataKey="value"
+                  label={({ cx, cy }) => {
+                    if (singleActionCategory) {
+                      return (
+                        <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle">
+                          <tspan x={cx} y={cy - 8} fontSize="28" fontWeight="700" fill="#1F2937">
+                            {singleActionCategory.value}
+                          </tspan>
+                          <tspan x={cx} y={cy + 16} fontSize="13" fill="#6B7280">
+                            {singleActionCategory.name}
+                          </tspan>
+                        </text>
+                      );
+                    }
+                    return null;
+                  }}
                 >
                   {actionItemsChartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -251,6 +278,11 @@ export default function ReportView() {
         {/* Risks by Trend */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="text-base font-semibold text-gray-900 mb-4">Risk Trends</h3>
+          {isSingleTrendCategory && singleTrendName && (
+            <p className="text-sm text-gray-500 mb-3">
+              Only '{singleTrendName}' risks identified across documents
+            </p>
+          )}
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={risksByTrendData} layout="vertical">
@@ -261,6 +293,7 @@ export default function ReportView() {
                   {risksByTrendData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
+                  <LabelList dataKey="value" position="right" style={{ fontSize: 12, fill: '#6B7280' }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -301,7 +334,9 @@ export default function ReportView() {
                     return item?.fullName || label;
                   }}
                 />
-                <Bar dataKey="risks" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="risks" fill={COLORS.primary} radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="risks" position="top" style={{ fontSize: 12, fill: '#6B7280' }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -557,9 +592,9 @@ export default function ReportView() {
               </button>
             )}
             <div className="space-y-16">
-              <section className="text-center">
-                <h1 className="text-5xl font-bold text-gray-900 mb-6">{data.project_name}</h1>
-                <p className="text-xl text-gray-600 leading-relaxed max-w-2xl mx-auto">
+              <section className="max-w-2xl mx-auto">
+                <h1 className="text-5xl font-bold text-gray-900 mb-6 text-center">{data.project_name}</h1>
+                <p className="text-xl text-gray-600 leading-relaxed text-left">
                   {data.executive_summary}
                 </p>
               </section>
@@ -613,7 +648,7 @@ export default function ReportView() {
                   <div className="space-y-6">
                     {data.merged_risks.slice(0, 5).map((risk, idx) => (
                       <div key={idx} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-                        <p className="text-xl font-medium text-gray-900">{risk.risk}</p>
+                        <p className="text-lg font-medium text-gray-900">{risk.risk}</p>
                         <div className="flex items-center justify-between mt-4">
                           <span
                             className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
