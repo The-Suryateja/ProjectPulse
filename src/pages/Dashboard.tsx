@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, FolderOpen, FileText, ChevronRight, Trash2, LogOut } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
+import ConfirmDialog from '../components/ConfirmDialog';
 import type { Project } from '../types';
 
 interface ProjectMeta {
@@ -18,6 +19,7 @@ export default function Dashboard() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [projectPendingDelete, setProjectPendingDelete] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProjects();
@@ -96,8 +98,6 @@ export default function Dashboard() {
   }
 
   async function deleteProject(projectId: string) {
-    if (!confirm('Are you sure you want to delete this project and all its documents?')) return;
-
     const { error } = await supabase
       .from('projects')
       .delete()
@@ -111,6 +111,7 @@ export default function Dashboard() {
         return next;
       });
     }
+    setProjectPendingDelete(null);
   }
 
   const lastActivity = projects.length > 0
@@ -233,7 +234,7 @@ export default function Dashboard() {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            deleteProject(project.id);
+                            setProjectPendingDelete(project.id);
                           }}
                           className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100"
                         >
@@ -284,6 +285,16 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={projectPendingDelete !== null}
+        title="Delete project?"
+        message="This will permanently delete this project and all its documents. This cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => projectPendingDelete && deleteProject(projectPendingDelete)}
+        onCancel={() => setProjectPendingDelete(null)}
+      />
     </div>
   );
 }
