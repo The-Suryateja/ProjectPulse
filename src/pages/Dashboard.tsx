@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, FolderOpen, FileText, ChevronRight, Trash2 } from 'lucide-react';
+import { Plus, FolderOpen, FileText, ChevronRight, Trash2, LogOut } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/AuthContext';
 import type { Project } from '../types';
 
 interface ProjectMeta {
@@ -10,6 +11,7 @@ interface ProjectMeta {
 }
 
 export default function Dashboard() {
+  const { signOut, user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectMeta, setProjectMeta] = useState<Record<string, ProjectMeta>>({});
   const [loading, setLoading] = useState(true);
@@ -124,13 +126,25 @@ export default function Dashboard() {
               <h1 className="text-2xl font-semibold text-gray-900">ProjectPulse</h1>
               <p className="text-sm text-gray-500 mt-1">Multi-document project analysis</p>
             </div>
-            <button
-              onClick={() => setShowNewProject(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              New Project
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowNewProject(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                New Project
+              </button>
+              <div className="flex items-center gap-2 pl-3 border-l border-gray-200">
+                {user?.email && <span className="text-sm text-gray-500">{user.email}</span>}
+                <button
+                  onClick={() => signOut()}
+                  title="Sign out"
+                  className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </header>
