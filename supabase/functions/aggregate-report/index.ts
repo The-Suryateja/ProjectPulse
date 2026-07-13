@@ -93,7 +93,7 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  console.log(`GEMINI_API_KEY present: ${!!geminiApiKey}, length: ${geminiApiKey.length}`);
+  console.log("GEMINI_API_KEY present: true");
 
   try {
     const supabase = createClient(
@@ -458,7 +458,7 @@ Deno.serve(async (req: Request) => {
   } catch (err) {
     console.error("Unhandled edge function error:", err);
     return new Response(
-      JSON.stringify({ error: err.message || "Internal server error", stack: err.stack }),
+      JSON.stringify({ error: err.message || "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
