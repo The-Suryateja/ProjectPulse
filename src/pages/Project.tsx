@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { triggerExtraction, triggerAggregation } from '../lib/api';
+import Toast from '../components/Toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 import type { Project, Document, DocumentType, ExtractionStatus, Report } from '../types';
 
 const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
@@ -43,6 +45,8 @@ export default function ProjectView() {
   const [generating, setGenerating] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [docPendingDelete, setDocPendingDelete] = useState<{ id: string; storagePath: string } | null>(null);
 
   useEffect(() => {
     if (projectId) {
@@ -177,7 +181,7 @@ export default function ProjectView() {
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
-        alert(`Failed to upload ${file.name}: ${uploadError.message}`);
+        setToastMessage(`Failed to upload ${file.name}: ${uploadError.message}`);
         continue;
       }
 
@@ -195,7 +199,7 @@ export default function ProjectView() {
 
       if (insertError) {
         console.error('Insert error:', insertError);
-        alert(`Failed to create document record for ${file.name}: ${insertError.message}`);
+        setToastMessage(`Failed to create document record for ${file.name}: ${insertError.message}`);
         continue;
       }
 
@@ -290,12 +294,11 @@ export default function ProjectView() {
   }
 
   async function deleteDocument(docId: string, storagePath: string) {
-    if (!confirm('Delete this document?')) return;
-
     await supabase.storage.from('documents').remove([storagePath]);
     await supabase.from('documents').delete().eq('id', docId);
     setDocuments((prev) => prev.filter((d) => d.id !== docId));
     setReport(null);
+    setDocPendingDelete(null);
   }
 
   async function generateReport() {
@@ -488,7 +491,7 @@ export default function ProjectView() {
                           </>
                         )}
                         <button
-                          onClick={() => deleteDocument(doc.id, doc.storage_path)}
+                          onClick={() => setDocPendingDelete({ id: doc.id, storagePath: doc.storage_path })}
                           className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -563,6 +566,18 @@ export default function ProjectView() {
           </div>
         )}
       </main>
+
+      <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
+
+      <ConfirmDialog
+        open={docPendingDelete !== null}
+        title="Delete document?"
+        message="This will permanently remove the document and its extracted data."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => docPendingDelete && deleteDocument(docPendingDelete.id, docPendingDelete.storagePath)}
+        onCancel={() => setDocPendingDelete(null)}
+      />
     </div>
   );
 }
