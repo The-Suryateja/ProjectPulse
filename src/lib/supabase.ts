@@ -7,4 +7,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const frontendUrl = import.meta.env.VITE_FRONTEND_URL || 'http://localhost:3000';
+const redirectTo = `${frontendUrl}/auth/callback`;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    flowType: 'pkce',
+    detectSessionInUrl: true,
+  },
+});
+
+export { redirectTo };

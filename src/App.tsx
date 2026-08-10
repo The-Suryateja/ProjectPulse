@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import Project from './pages/Project';
 import Report from './pages/Report';
 import Login from './pages/Login';
+import AuthCallback from './pages/AuthCallback';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 
 function AuthGate({ children }: { children: ReactNode }) {
@@ -34,6 +35,7 @@ function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/project/:projectId" element={<Project />} />
               <Route path="/report/:projectId" element={<Report />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
             </Routes>
           </AuthGate>
         </div>
