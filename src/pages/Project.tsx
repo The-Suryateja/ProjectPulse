@@ -174,10 +174,11 @@ export default function ProjectView() {
       const confirmed = await showUploadDialog(file);
       if (!confirmed) continue;
 
-      const fileName = `${Date.now()}-${file.name}`;
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+      const storageFileName = `${Date.now()}-${sanitizedFileName}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('documents')
-        .upload(`${projectId}/${fileName}`, file);
+        .upload(`${projectId}/${storageFileName}`, file);
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
