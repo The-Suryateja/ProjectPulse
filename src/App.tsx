@@ -30,14 +30,21 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <div className="min-h-screen bg-gray-50">
-          <AuthGate>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/project/:projectId" element={<Project />} />
-              <Route path="/report/:projectId" element={<Report />} />
-              <Route path="/auth/callback" element={<AuthCallback />} />
-            </Routes>
-          </AuthGate>
+          <Routes>
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route
+              path="/*"
+              element={
+                <AuthGate>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/project/:projectId" element={<Project />} />
+                    <Route path="/report/:projectId" element={<Report />} />
+                  </Routes>
+                </AuthGate>
+              }
+            />
+          </Routes>
         </div>
       </BrowserRouter>
     </AuthProvider>
