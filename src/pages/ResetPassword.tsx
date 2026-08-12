@@ -2,9 +2,11 @@ import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/AuthContext';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
+  const { clearPasswordRecovery } = useAuth();
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +27,7 @@ export default function ResetPassword() {
       return;
     }
 
+    clearPasswordRecovery();
     await supabase.auth.signOut();
     navigate('/login', {
       replace: true,
@@ -37,7 +40,6 @@ export default function ResetPassword() {
       <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-6">
         <h1 className="text-xl font-semibold text-gray-900">Set a new password</h1>
         <p className="text-sm text-gray-500 mt-1">Choose a new password for your account.</p>
-
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">New password</label>
@@ -60,9 +62,7 @@ export default function ResetPassword() {
               </button>
             </div>
           </div>
-
           {error && <p className="text-sm text-red-600">{error}</p>}
-
           <button
             type="submit"
             disabled={submitting}
