@@ -9,6 +9,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const frontendUrl = import.meta.env.VITE_FRONTEND_URL || 'http://localhost:3000';
 const redirectTo = `${frontendUrl}/auth/callback`;
+const resetPasswordRedirectTo = `${frontendUrl}/reset-password`;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -17,4 +18,4 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-export { redirectTo };
+export { redirectTo, resetPasswordRedirectTo };

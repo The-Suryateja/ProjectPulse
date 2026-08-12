@@ -1,15 +1,19 @@
 import { useState, FormEvent } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
-import { supabase, redirectTo } from '../lib/supabase';
+import { supabase, resetPasswordRedirectTo } from '../lib/supabase';
 
 export default function Login() {
   const { signIn, signUp } = useAuth();
+  const location = useLocation();
   const [mode, setMode] = useState<'sign_in' | 'sign_up' | 'forgot_password'>('sign_in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(
+    (location.state as { message?: string } | null)?.message ?? null,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -21,7 +25,7 @@ export default function Login() {
 
     if (mode === 'forgot_password') {
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo,
+        redirectTo: resetPasswordRedirectTo,
       });
       if (resetError) {
         setError(resetError.message);
