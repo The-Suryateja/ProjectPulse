@@ -1,70 +1,61 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+import { type ReactNode } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Dashboard from './pages/Dashboard';
+import Project from './pages/Project';
+import Report from './pages/Report';
+import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
+import AuthCallback from './pages/AuthCallback';
+import { AuthProvider, useAuth } from './lib/AuthContext';
 
-interface AuthContextValue {
-  session: Session | null;
-  user: User | null;
-  loading: boolean;
-  isPasswordRecovery: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
-  signOut: () => Promise<void>;
-  clearPasswordRecovery: () => void;
+function AuthGate({ children }: { children: ReactNode }) {
+  const { session, loading, isPasswordRecovery } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (isPasswordRecovery) {
+    return <ResetPassword />;
+  }
+
+  if (!session) {
+    return <Login />;
+  }
+
+  return <>{children}</>;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
-      setSession(newSession);
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsPasswordRecovery(true);
-      }
-    });
-
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
-  async function signIn(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error ? error.message : null };
-  }
-
-  async function signUp(email: string, password: string) {
-    const { error } = await supabase.auth.signUp({ email, password });
-    return { error: error ? error.message : null };
-  }
-
-  async function signOut() {
-    await supabase.auth.signOut();
-  }
-
-  function clearPasswordRecovery() {
-    setIsPasswordRecovery(false);
-  }
-
+function App() {
   return (
-    <AuthContext.Provider
-      value={{ session, user: session?.user ?? null, loading, isPasswordRecovery, signIn, signUp, signOut, clearPasswordRecovery }}
-    >
-      {children}
-    </AuthContext.Provider>
+    <AuthProvider>
+      <BrowserRouter>
+        <div className="min-h-screen bg-gray-50">
+          <Routes>
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/*"
+              element={
+                <AuthGate>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/project/:projectId" element={<Project />} />
+                    <Route path="/report/:projectId" element={<Report />} />
+                    <Route path="*" element={<Navigate to="/login" replace />} />
+                  </Routes>
+                </AuthGate>
+              }
+            />
+          </Routes>
+        </div>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
-  return ctx;
-}
+export default App;
