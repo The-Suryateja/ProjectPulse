@@ -15,20 +15,34 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+// Supabase's PASSWORD_RECOVERY event is not reliably fired for the PKCE
+// (?code=...) flow -- it sometimes fires as SIGNED_IN instead, even for a
+// genuine recovery link. Since we control the redirect URL ourselves
+// (resetPasswordRedirectTo points to /reset-password), we can detect a
+// recovery visit directly from the URL instead of depending on that event.
+// This is checked synchronously on first render so there's no flash of the
+// normal Dashboard before the recovery form takes over.
+function isOnRecoveryPath() {
+  return window.location.pathname === '/reset-password';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(isOnRecoveryPath);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setLoading(false);
+      if (isOnRecoveryPath()) {
+        setIsPasswordRecovery(true);
+      }
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
-      if (event === 'PASSWORD_RECOVERY') {
+      if (event === 'PASSWORD_RECOVERY' || isOnRecoveryPath()) {
         setIsPasswordRecovery(true);
       }
     });
