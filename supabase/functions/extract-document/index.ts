@@ -471,7 +471,7 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log(`Document ${document_id}: Gemini API responded, parsing JSON...`);
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
     let geminiData: any;
     try {
       geminiData = await geminiResponse.json();
@@ -503,7 +503,7 @@ Deno.serve(async (req: Request) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
     let extractedData: any;
     try {
       let jsonStr = content.trim();
