@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -11,6 +11,29 @@ export default function ResetPassword() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function ensureSession() {
+      const code = new URL(window.location.href).searchParams.get('code');
+      if (code) {
+        await supabase.auth.exchangeCodeForSession(window.location.href);
+      }
+      const { data } = await supabase.auth.getSession();
+      if (!cancelled) {
+        if (data.session) {
+          setSessionReady(true);
+        } else {
+          setError('Unable to establish a recovery session. Please use the latest link from your email.');
+        }
+      }
+    }
+
+    ensureSession();
+    return () => { cancelled = true; };
+  }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -65,10 +88,10 @@ export default function ResetPassword() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !sessionReady}
             className="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
           >
-            {submitting ? 'Please wait...' : 'Update password'}
+            {submitting ? 'Please wait...' : !sessionReady ? 'Verifying...' : 'Update password'}
           </button>
         </form>
       </div>
