@@ -17,17 +17,16 @@ export default function ResetPassword() {
     let cancelled = false;
 
     async function ensureSession() {
-      const code = new URL(window.location.href).searchParams.get('code');
-      if (code) {
-        await supabase.auth.exchangeCodeForSession(window.location.href);
-      }
-      const { data } = await supabase.auth.getSession();
-      if (!cancelled) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { data } = await supabase.auth.getSession();
         if (data.session) {
-          setSessionReady(true);
-        } else {
-          setError('Unable to establish a recovery session. Please use the latest link from your email.');
+          if (!cancelled) setSessionReady(true);
+          return;
         }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      if (!cancelled) {
+        setError('Unable to establish a recovery session. Please use the latest link from your email.');
       }
     }
 
