@@ -12,56 +12,43 @@ export default function ResetPassword() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
+  
+  // Guard reference to prevent React Strict Mode double-execution
   const settledRef = useRef(false);
 
   useEffect(() => {
-    if (settledRef.current) return;
-    settledRef.current = true;
+    const establishSession = async () => {
+      if (settledRef.current) return;
+      settledRef.current = true;
 
-    const url = new URL(window.location.href);
-    const code = url.searchParams.get('code');
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get('code');
 
-    if (!code) {
-     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (code) {
+        // 1. Explicitly exchange the token
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        
+        if (exchangeError) {
+          setError('Unable to establish a recovery session. Please use the latest link from your email.');
+          return;
+        }
+
+        // 2. Clean the URL to prevent token reuse on accidental refresh
+        window.history.replaceState({}, '', window.location.pathname);
+        setSessionReady(true);
+      } else {
+        // 3. Fallback: Check if a valid session is already active
+        const { data: { session } } = await supabase.auth.getSession();
+        
         if (session) {
           setSessionReady(true);
         } else {
           setError('Unable to establish a recovery session. Please use the latest link from your email.');
         }
-      });
-      return;
-    }
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
-        if (session) {
-          const cleanUrl = window.location.pathname;
-          window.history.replaceState({}, '', cleanUrl);
-          setSessionReady(true);
-        }
       }
-    });
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        const cleanUrl = window.location.pathname;
-        window.history.replaceState({}, '', cleanUrl);
-        setSessionReady(true);
-      }
-    });
-
-    const timeout = setTimeout(() => {
-      supabase.auth.getSession().then(({ data }) => {
-        if (!data.session) {
-          setError('Unable to establish a recovery session. Please use the latest link from your email.');
-        }
-      });
-    }, 5000);
-
-    return () => {
-      listener.subscription.unsubscribe();
-      clearTimeout(timeout);
     };
+
+    establishSession();
   }, []);
 
   async function handleSubmit(event: FormEvent) {
