@@ -16,14 +16,33 @@ export default function ResetPassword() {
   useEffect(() => {
     let cancelled = false;
 
+    // [DEBUG] Log every auth state change event during this page's lifetime
+    const { data: debugListener } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[ResetPassword DEBUG] onAuthStateChange:', { event, sessionPresent: !!session, userId: session?.user?.id });
+    });
+
     async function ensureSession() {
-      const code = new URL(window.location.href).searchParams.get('code');
+      const fullUrl = window.location.href;
+      const url = new URL(fullUrl);
+      const code = url.searchParams.get('code');
+      console.log('[ResetPassword DEBUG] ensureSession started', { fullUrl, code });
+
       if (code) {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(window.location.href);
+        console.log('[ResetPassword DEBUG] calling exchangeCodeForSession...');
+        const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(fullUrl);
+        console.log('[ResetPassword DEBUG] exchangeCodeForSession result:', {
+          error: exchangeError ? { name: exchangeError.name, message: exchangeError.message, status: exchangeError.status } : null,
+          data: exchangeData ? { user: exchangeData.user?.id, session: !!exchangeData.session } : null,
+        });
+
         if (exchangeError) {
           const isAlreadyConsumed = /invalid|already|expired|used/i.test(exchangeError.message);
+          console.log('[ResetPassword DEBUG] exchange failed', { message: exchangeError.message, isAlreadyConsumed });
+
           if (isAlreadyConsumed) {
+            console.log('[ResetPassword DEBUG] code may already be consumed, checking getSession()...');
             const { data } = await supabase.auth.getSession();
+            console.log('[ResetPassword DEBUG] fallback getSession():', { sessionPresent: !!data.session, userId: data.session?.user?.id });
             if (!cancelled) {
               if (data.session) {
                 setSessionReady(true);
@@ -39,7 +58,10 @@ export default function ResetPassword() {
           return;
         }
       }
+
+      console.log('[ResetPassword DEBUG] no error from exchange (or no code), checking getSession()...');
       const { data } = await supabase.auth.getSession();
+      console.log('[ResetPassword DEBUG] post-exchange getSession():', { sessionPresent: !!data.session, userId: data.session?.user?.id });
       if (!cancelled) {
         if (data.session) {
           setSessionReady(true);
@@ -50,13 +72,16 @@ export default function ResetPassword() {
     }
 
     ensureSession();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; debugListener.subscription.unsubscribe(); };
   }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
+
+    const { data: preSubmitSession } = await supabase.auth.getSession();
+    console.log('[ResetPassword DEBUG] handleSubmit pre-submit getSession():', { sessionPresent: !!preSubmitSession.session, userId: preSubmitSession.session?.user?.id });
 
     const { error: updateError } = await supabase.auth.updateUser({
       password: newPassword,
