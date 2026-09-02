@@ -22,8 +22,7 @@ export default function ResetPassword() {
     const code = url.searchParams.get('code');
 
     if (!code) {
-      const { data } = supabase.auth.getSession();
-      data.then(({ session }) => {
+     supabase.auth.getSession().then(({ data: { session } }) => {
         if (session) {
           setSessionReady(true);
         } else {
