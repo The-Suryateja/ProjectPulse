@@ -12,43 +12,81 @@ export default function ResetPassword() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
-  
-  // Guard reference to prevent React Strict Mode double-execution
+
   const settledRef = useRef(false);
 
   useEffect(() => {
-    const establishSession = async () => {
-      if (settledRef.current) return;
-      settledRef.current = true;
+    if (settledRef.current) return;
+    settledRef.current = true;
 
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get('code');
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
 
-      if (code) {
-        // 1. Explicitly exchange the token
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-        
-        if (exchangeError) {
-          setError('Unable to establish a recovery session. Please use the latest link from your email.');
-          return;
-        }
-
-        // 2. Clean the URL to prevent token reuse on accidental refresh
+    function cleanUrl() {
+      if (window.location.search) {
         window.history.replaceState({}, '', window.location.pathname);
-        setSessionReady(true);
-      } else {
-        // 3. Fallback: Check if a valid session is already active
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session) {
-          setSessionReady(true);
+      }
+    }
+
+    function markReady() {
+      cleanUrl();
+      setSessionReady(true);
+    }
+
+    // No code in URL — check if a session already exists (e.g. user navigated
+    // here after the exchange already happened elsewhere).
+    if (!code) {
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          markReady();
         } else {
           setError('Unable to establish a recovery session. Please use the latest link from your email.');
         }
-      }
-    };
+      });
+      return;
+    }
 
-    establishSession();
+    // detectSessionInUrl (set on the Supabase client) will automatically
+    // exchange the PKCE code. We listen for the resulting auth event instead
+    // of calling exchangeCodeForSession ourselves, which would race with the
+    // automatic exchange and invalidate the single-use code.
+    let resolved = false;
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (resolved) return;
+      if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && session) {
+        resolved = true;
+        markReady();
+      }
+    });
+
+    // The automatic exchange may have already completed before our listener
+    // was attached. Check synchronously as a fallback.
+    supabase.auth.getSession().then(({ data }) => {
+      if (!resolved && data.session) {
+        resolved = true;
+        markReady();
+      }
+    });
+
+    // Safety timeout — if no session appears within 5 seconds, show an error
+    // so the user isn't stuck on "Verifying..." forever.
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        supabase.auth.getSession().then(({ data }) => {
+          if (!data.session) {
+            setError('Unable to establish a recovery session. Please use the latest link from your email.');
+          } else {
+            markReady();
+          }
+        });
+      }
+    }, 5000);
+
+    return () => {
+      listener.subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   async function handleSubmit(event: FormEvent) {
