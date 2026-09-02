@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -12,76 +12,63 @@ export default function ResetPassword() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
+  const settledRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
+    if (settledRef.current) return;
+    settledRef.current = true;
 
-    // [DEBUG] Log every auth state change event during this page's lifetime
-    const { data: debugListener } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[ResetPassword DEBUG] onAuthStateChange:', { event, sessionPresent: !!session, userId: session?.user?.id });
-    });
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
 
-    async function ensureSession() {
-      const fullUrl = window.location.href;
-      const url = new URL(fullUrl);
-      const code = url.searchParams.get('code');
-      console.log('[ResetPassword DEBUG] ensureSession started', { fullUrl, code });
-
-      if (code) {
-        console.log('[ResetPassword DEBUG] calling exchangeCodeForSession...');
-        const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(fullUrl);
-        console.log('[ResetPassword DEBUG] exchangeCodeForSession result:', {
-          error: exchangeError ? { name: exchangeError.name, message: exchangeError.message, status: exchangeError.status } : null,
-          data: exchangeData ? { user: exchangeData.user?.id, session: !!exchangeData.session } : null,
-        });
-
-        if (exchangeError) {
-          const isAlreadyConsumed = /invalid|already|expired|used/i.test(exchangeError.message);
-          console.log('[ResetPassword DEBUG] exchange failed', { message: exchangeError.message, isAlreadyConsumed });
-
-          if (isAlreadyConsumed) {
-            console.log('[ResetPassword DEBUG] code may already be consumed, checking getSession()...');
-            const { data } = await supabase.auth.getSession();
-            console.log('[ResetPassword DEBUG] fallback getSession():', { sessionPresent: !!data.session, userId: data.session?.user?.id });
-            if (!cancelled) {
-              if (data.session) {
-                setSessionReady(true);
-              } else {
-                setError('Unable to establish a recovery session. Please use the latest link from your email.');
-              }
-            }
-            return;
-          }
-          if (!cancelled) {
-            setError(exchangeError.message);
-          }
-          return;
-        }
-      }
-
-      console.log('[ResetPassword DEBUG] no error from exchange (or no code), checking getSession()...');
-      const { data } = await supabase.auth.getSession();
-      console.log('[ResetPassword DEBUG] post-exchange getSession():', { sessionPresent: !!data.session, userId: data.session?.user?.id });
-      if (!cancelled) {
-        if (data.session) {
+    if (!code) {
+      const { data } = supabase.auth.getSession();
+      data.then(({ session }) => {
+        if (session) {
           setSessionReady(true);
         } else {
           setError('Unable to establish a recovery session. Please use the latest link from your email.');
         }
-      }
+      });
+      return;
     }
 
-    ensureSession();
-    return () => { cancelled = true; debugListener.subscription.unsubscribe(); };
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
+        if (session) {
+          const cleanUrl = window.location.pathname;
+          window.history.replaceState({}, '', cleanUrl);
+          setSessionReady(true);
+        }
+      }
+    });
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, '', cleanUrl);
+        setSessionReady(true);
+      }
+    });
+
+    const timeout = setTimeout(() => {
+      supabase.auth.getSession().then(({ data }) => {
+        if (!data.session) {
+          setError('Unable to establish a recovery session. Please use the latest link from your email.');
+        }
+      });
+    }, 5000);
+
+    return () => {
+      listener.subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
-
-    const { data: preSubmitSession } = await supabase.auth.getSession();
-    console.log('[ResetPassword DEBUG] handleSubmit pre-submit getSession():', { sessionPresent: !!preSubmitSession.session, userId: preSubmitSession.session?.user?.id });
 
     const { error: updateError } = await supabase.auth.updateUser({
       password: newPassword,
