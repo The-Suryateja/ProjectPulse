@@ -17,16 +17,35 @@ export default function ResetPassword() {
     let cancelled = false;
 
     async function ensureSession() {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
-          if (!cancelled) setSessionReady(true);
+      const code = new URL(window.location.href).searchParams.get('code');
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(window.location.href);
+        if (exchangeError) {
+          const isAlreadyConsumed = /invalid|already|expired|used/i.test(exchangeError.message);
+          if (isAlreadyConsumed) {
+            const { data } = await supabase.auth.getSession();
+            if (!cancelled) {
+              if (data.session) {
+                setSessionReady(true);
+              } else {
+                setError('Unable to establish a recovery session. Please use the latest link from your email.');
+              }
+            }
+            return;
+          }
+          if (!cancelled) {
+            setError(exchangeError.message);
+          }
           return;
         }
-        await new Promise((resolve) => setTimeout(resolve, 300));
       }
+      const { data } = await supabase.auth.getSession();
       if (!cancelled) {
-        setError('Unable to establish a recovery session. Please use the latest link from your email.');
+        if (data.session) {
+          setSessionReady(true);
+        } else {
+          setError('Unable to establish a recovery session. Please use the latest link from your email.');
+        }
       }
     }
 
