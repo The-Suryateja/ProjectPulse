@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Mail } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 
@@ -12,82 +12,70 @@ export default function ResetPassword() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
+  const [exchanging, setExchanging] = useState(false);
 
   const settledRef = useRef(false);
 
+  const hasCode = new URL(window.location.href).searchParams.has('code');
+
   useEffect(() => {
+    if (hasCode) return;
     if (settledRef.current) return;
     settledRef.current = true;
 
-    const url = new URL(window.location.href);
-    const code = url.searchParams.get('code');
-
-    function cleanUrl() {
-      if (window.location.search) {
-        window.history.replaceState({}, '', window.location.pathname);
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        setSessionReady(true);
+      } else {
+        setError('Unable to establish a recovery session. Please use the latest link from your email.');
       }
-    }
+    });
+  }, [hasCode]);
 
-    function markReady() {
-      cleanUrl();
-      setSessionReady(true);
+  function cleanUrl() {
+    if (window.location.search) {
+      window.history.replaceState({}, '', window.location.pathname);
     }
+  }
 
-    // No code in URL — check if a session already exists (e.g. user navigated
-    // here after the exchange already happened elsewhere).
-    if (!code) {
-      supabase.auth.getSession().then(({ data }) => {
+  async function handleContinue() {
+    if (settledRef.current) return;
+    settledRef.current = true;
+    setExchanging(true);
+    setError(null);
+
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      setError('Unable to establish a recovery session. Please use the latest link from your email.');
+      setExchanging(false);
+    }, 5000);
+
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(window.location.href);
+    clearTimeout(timeoutId);
+
+    if (timedOut) return;
+
+    if (exchangeError) {
+      const isAlreadyConsumed = /invalid|already|expired|used/i.test(exchangeError.message);
+      if (isAlreadyConsumed) {
+        const { data } = await supabase.auth.getSession();
         if (data.session) {
-          markReady();
-        } else {
-          setError('Unable to establish a recovery session. Please use the latest link from your email.');
+          cleanUrl();
+          setSessionReady(true);
+          setExchanging(false);
+          return;
         }
-      });
+      }
+      setError('Unable to establish a recovery session. Please use the latest link from your email.');
+      setExchanging(false);
       return;
     }
 
-    // detectSessionInUrl (set on the Supabase client) will automatically
-    // exchange the PKCE code. We listen for the resulting auth event instead
-    // of calling exchangeCodeForSession ourselves, which would race with the
-    // automatic exchange and invalidate the single-use code.
-    let resolved = false;
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (resolved) return;
-      if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && session) {
-        resolved = true;
-        markReady();
-      }
-    });
-
-    // The automatic exchange may have already completed before our listener
-    // was attached. Check synchronously as a fallback.
-    supabase.auth.getSession().then(({ data }) => {
-      if (!resolved && data.session) {
-        resolved = true;
-        markReady();
-      }
-    });
-
-    // Safety timeout — if no session appears within 5 seconds, show an error
-    // so the user isn't stuck on "Verifying..." forever.
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        supabase.auth.getSession().then(({ data }) => {
-          if (!data.session) {
-            setError('Unable to establish a recovery session. Please use the latest link from your email.');
-          } else {
-            markReady();
-          }
-        });
-      }
-    }, 5000);
-
-    return () => {
-      listener.subscription.unsubscribe();
-      clearTimeout(timeout);
-    };
-  }, []);
+    cleanUrl();
+    setSessionReady(true);
+    setExchanging(false);
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -110,6 +98,41 @@ export default function ResetPassword() {
       replace: true,
       state: { message: 'Your password has been updated. Sign in with your new password.' },
     });
+  }
+
+  const showContinue = hasCode && !sessionReady && !exchanging && !error;
+
+  if (showContinue) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-6 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center">
+              <Mail className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+          <h1 className="text-xl font-semibold text-gray-900">Reset your password</h1>
+          <p className="text-sm text-gray-500 mt-2">Click below to continue resetting your password.</p>
+          <button
+            onClick={handleContinue}
+            className="w-full mt-6 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (exchanging) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-6 text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+          <p className="mt-3 text-sm text-gray-600">Verifying your recovery link...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
