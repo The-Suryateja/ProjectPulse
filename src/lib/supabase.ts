@@ -14,7 +14,7 @@ const resetPasswordRedirectTo = `${frontendUrl}/reset-password`;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     flowType: 'pkce',
-    detectSessionInUrl: true,
+    detectSessionInUrl: false,
   },
 });
 

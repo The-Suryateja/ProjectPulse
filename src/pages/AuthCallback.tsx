@@ -10,27 +10,33 @@ export default function AuthCallback() {
   useEffect(() => {
     let resolved = false;
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
-      if (resolved) return;
-      if (event === 'SIGNED_IN' && session) {
+    async function handleCallback() {
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
+        window.location.href,
+      );
+
+      if (exchangeError) {
+        resolved = true;
+        setError('Authentication link is invalid or has expired.');
+        return;
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
         resolved = true;
         navigate('/', { replace: true });
       }
-    });
+    }
+
+    handleCallback();
 
     const timeout = setTimeout(() => {
       if (!resolved) {
-        const hash = window.location.hash;
-        if (hash.includes('error_description=')) {
-          setError('Authentication link is invalid or has expired.');
-        } else {
-          navigate('/', { replace: true });
-        }
+        navigate('/', { replace: true });
       }
     }, 3000);
 
     return () => {
-      subscription.subscription.unsubscribe();
       clearTimeout(timeout);
     };
   }, [navigate]);

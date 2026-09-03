@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, Mail } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -7,36 +7,21 @@ import { useAuth } from '../lib/AuthContext';
 export default function ResetPassword() {
   const navigate = useNavigate();
   const { clearPasswordRecovery } = useAuth();
+
+  const hasCode = new URL(window.location.href).searchParams.has('code');
+
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    hasCode
+      ? null
+      : 'Unable to establish a recovery session. Please use the latest link from your email.',
+  );
   const [submitting, setSubmitting] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
   const [exchanging, setExchanging] = useState(false);
 
   const settledRef = useRef(false);
-
-  const hasCode = new URL(window.location.href).searchParams.has('code');
-
-  useEffect(() => {
-    if (hasCode) return;
-    if (settledRef.current) return;
-    settledRef.current = true;
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        setSessionReady(true);
-      } else {
-        setError('Unable to establish a recovery session. Please use the latest link from your email.');
-      }
-    });
-  }, [hasCode]);
-
-  function cleanUrl() {
-    if (window.location.search) {
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }
 
   async function handleContinue() {
     if (settledRef.current) return;
@@ -44,35 +29,17 @@ export default function ResetPassword() {
     setExchanging(true);
     setError(null);
 
-    let timedOut = false;
-    const timeoutId = setTimeout(() => {
-      timedOut = true;
-      setError('Unable to establish a recovery session. Please use the latest link from your email.');
-      setExchanging(false);
-    }, 5000);
-
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(window.location.href);
-    clearTimeout(timeoutId);
-
-    if (timedOut) return;
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
+      window.location.href,
+    );
 
     if (exchangeError) {
-      const isAlreadyConsumed = /invalid|already|expired|used/i.test(exchangeError.message);
-      if (isAlreadyConsumed) {
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
-          cleanUrl();
-          setSessionReady(true);
-          setExchanging(false);
-          return;
-        }
-      }
       setError('Unable to establish a recovery session. Please use the latest link from your email.');
       setExchanging(false);
       return;
     }
 
-    cleanUrl();
+    window.history.replaceState({}, '', window.location.pathname);
     setSessionReady(true);
     setExchanging(false);
   }
