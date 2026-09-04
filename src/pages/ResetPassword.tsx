@@ -6,19 +6,29 @@ import { useAuth } from '../lib/AuthContext';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
-  // Consume the session directly from AuthContext
   const { session, clearPasswordRecovery } = useAuth();
   
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
 
-  // Clean the URL purely for visual purposes after AuthContext auto-exchanges the code
   useEffect(() => {
     const hasCode = new URLSearchParams(window.location.search).has('code');
+    
     if (session && hasCode) {
       window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    // Fallback: If no session is created after 3 seconds, the background exchange failed.
+    if (hasCode && !session) {
+      const timer = setTimeout(() => {
+        if (!session) {
+          setVerificationError("The recovery link is invalid, expired, or opened in a different browser.");
+        }
+      }, 3000);
+      return () => clearTimeout(timer);
     }
   }, [session]);
 
@@ -27,7 +37,6 @@ export default function ResetPassword() {
     setError(null);
     setSubmitting(true);
 
-    // Final validation to ensure the JWT exists before network request
     if (!session) {
       setError("Session was lost. Please request a new reset link.");
       setSubmitting(false);
@@ -57,8 +66,19 @@ export default function ResetPassword() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-6 text-center space-y-4">
-           <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
-           <p className="text-sm text-gray-600">Securely verifying your link...</p>
+           {verificationError ? (
+             <div className="space-y-4">
+               <p className="text-sm text-red-600">{verificationError}</p>
+               <button onClick={() => navigate('/login')} className="w-full px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
+                 Return to Login
+               </button>
+             </div>
+           ) : (
+             <>
+               <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+               <p className="text-sm text-gray-600">Securely verifying your link...</p>
+             </>
+           )}
         </div>
       </div>
     );
