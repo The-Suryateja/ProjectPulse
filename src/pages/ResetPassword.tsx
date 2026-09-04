@@ -1,4 +1,4 @@
-import { FormEvent, useRef, useState, useEffect } from 'react';
+import { FormEvent, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, Mail } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -6,62 +6,33 @@ import { useAuth } from '../lib/AuthContext';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
-  const { clearPasswordRecovery } = useAuth();
+  // Consume the session directly from AuthContext
+  const { session, clearPasswordRecovery } = useAuth();
   
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
-  const [exchanging, setExchanging] = useState(false);
 
-  const settledRef = useRef(false);
-  
-  // Determine initial state based on URL
-  const hasCode = new URLSearchParams(window.location.search).has('code');
-
+  // Clean the URL purely for visual purposes after AuthContext auto-exchanges the code
   useEffect(() => {
-    if (!hasCode && !sessionReady) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) setSessionReady(true);
-      });
+    const hasCode = new URLSearchParams(window.location.search).has('code');
+    if (session && hasCode) {
+      window.history.replaceState({}, '', window.location.pathname);
     }
-  }, [hasCode, sessionReady]);
-
-  async function handleContinue() {
-    if (settledRef.current) return;
-    settledRef.current = true;
-    
-    setExchanging(true);
-    setError(null);
-
-    // CRITICAL FIX: Extract ONLY the alphanumeric code, not the full URL
-    const code = new URLSearchParams(window.location.search).get('code');
-
-    if (!code) {
-      setError('Invalid or missing recovery link.');
-      setExchanging(false);
-      return;
-    }
-
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-
-    if (exchangeError) {
-      setError('Unable to establish a recovery session. Please use the latest link from your email.');
-      setExchanging(false);
-      return;
-    }
-
-    // Strip the code from the URL and unlock the password form
-    window.history.replaceState({}, '', window.location.pathname);
-    setSessionReady(true);
-    setExchanging(false);
-  }
+  }, [session]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
+
+    // Final validation to ensure the JWT exists before network request
+    if (!session) {
+      setError("Session was lost. Please request a new reset link.");
+      setSubmitting(false);
+      return;
+    }
 
     const { error: updateError } = await supabase.auth.updateUser({
       password: newPassword,
@@ -81,43 +52,19 @@ export default function ResetPassword() {
     });
   }
 
-  // UI STATE 1: Verify Link
-  if (hasCode && !sessionReady) {
+  // UI STATE 1: Waiting for AuthContext to process the URL
+  if (!session) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-6 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center">
-              <Mail className="w-6 h-6 text-blue-600" />
-            </div>
-          </div>
-          <h1 className="text-xl font-semibold text-gray-900">Reset your password</h1>
-          
-          {exchanging ? (
-             <div className="mt-6 space-y-3">
-               <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
-               <p className="text-sm text-gray-600">Verifying...</p>
-             </div>
-          ) : (
-            <>
-              {error ? (
-                <div className="mt-6 space-y-4">
-                  <p className="text-sm text-red-600">{error}</p>
-                  <button onClick={() => window.location.href = '/login'} className="w-full px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">Return to Login</button>
-                </div>
-              ) : (
-                <button onClick={handleContinue} className="w-full mt-6 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
-                  Continue
-                </button>
-              )}
-            </>
-          )}
+        <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-6 text-center space-y-4">
+           <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+           <p className="text-sm text-gray-600">Securely verifying your link...</p>
         </div>
       </div>
     );
   }
 
-  // UI STATE 2: Set New Password Form
+  // UI STATE 2: Token validated by AuthContext, form unlocked
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-6">
