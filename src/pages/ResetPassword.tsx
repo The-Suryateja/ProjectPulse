@@ -1,4 +1,4 @@
-import { FormEvent, useState, useEffect } from 'react';
+import { FormEvent, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -12,23 +12,43 @@ export default function ResetPassword() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [isExchanging, setIsExchanging] = useState(true);
+
+  // Guard to prevent React StrictMode from double-firing the single-use token
+  const exchangeAttempted = useRef(false);
 
   useEffect(() => {
-    const hasCode = new URLSearchParams(window.location.search).has('code');
-    
-    if (session && hasCode) {
-      window.history.replaceState({}, '', window.location.pathname);
+    const searchParams = new URLSearchParams(window.location.search);
+    const code = searchParams.get('code');
+    const urlError = searchParams.get('error_description');
+
+    // 1. Instantly handle any backend errors passed in the URL
+    if (urlError) {
+      setError(urlError.replace(/\+/g, ' '));
+      setIsExchanging(false);
+      return;
     }
 
-    // Fallback: If no session is created after 3 seconds, the background exchange failed.
-    if (hasCode && !session) {
-      const timer = setTimeout(() => {
-        if (!session) {
-          setVerificationError("The recovery link is invalid, expired, or opened in a different browser.");
+    // 2. Execute the token exchange exactly once
+    if (code && !exchangeAttempted.current) {
+      exchangeAttempted.current = true;
+
+      const exchangeToken = async () => {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        
+        if (exchangeError) {
+          setError(exchangeError.message);
+        } else {
+          // Clean the URL so the token isn't visible in the address bar
+          window.history.replaceState({}, '', window.location.pathname);
         }
-      }, 3000);
-      return () => clearTimeout(timer);
+        setIsExchanging(false);
+      };
+
+      exchangeToken();
+    } else if (!code && !session) {
+      // If there is no code and no active session, stop spinning
+      setIsExchanging(false);
     }
   }, [session]);
 
@@ -61,14 +81,14 @@ export default function ResetPassword() {
     });
   }
 
-  // UI STATE 1: Waiting for AuthContext to process the URL
-  if (!session) {
+  // UI STATE 1: Exchanging token or showing exchange error
+  if (isExchanging || (!session && error)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-6 text-center space-y-4">
-           {verificationError ? (
+           {error ? (
              <div className="space-y-4">
-               <p className="text-sm text-red-600">{verificationError}</p>
+               <p className="text-sm text-red-600">{error}</p>
                <button onClick={() => navigate('/login')} className="w-full px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
                  Return to Login
                </button>
@@ -84,7 +104,7 @@ export default function ResetPassword() {
     );
   }
 
-  // UI STATE 2: Token validated by AuthContext, form unlocked
+  // UI STATE 2: Session established, form unlocked
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-6">
